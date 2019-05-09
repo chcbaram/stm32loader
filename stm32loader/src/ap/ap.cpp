@@ -9,9 +9,9 @@
 
 
 #include "ap.h"
+#include "boot/boot.h"
 
 
-uint8_t uart_ch = _DEF_UART2;
 
 
 
@@ -22,8 +22,7 @@ void apInit(void)
 
 void apMain(int argc, char *argv[])
 {
-  bool uart_is_open = false;
-
+  bool is_open = false;
 
 
   if (argc >= 3)
@@ -35,12 +34,9 @@ void apMain(int argc, char *argv[])
     baud = (int)strtoul((const char * ) argv[2], (char **)NULL, (int) 0);
 
 
-    uartSetPortName(uart_ch, port);
-    uartSetParity(uart_ch, UART_PARITY_EVEN);
-
-    if (uartOpen(uart_ch, baud) == OK)
+    if (bootOpen(port, baud) == true)
     {
-      uart_is_open = true;
+      is_open = true;
       printf("uart open : %s, %d\n", port, baud);
     }
     else
@@ -54,41 +50,27 @@ void apMain(int argc, char *argv[])
     return;
   }
 
-  uint32_t pre_time;
 
-
-  //uartPutch(uart_ch, 0x7F);
-  //uartPutch(uart_ch, 0x7F);
-  //uartPutch(uart_ch, 0x7F);
-  //uartPutch(uart_ch, 0x7F);
-  uartPutch(uart_ch, 0x7F);
-  uartPutch(uart_ch, 0xFF);
-  delay(100);
-
-  uartPutch(uart_ch, 0x00);
-  uartPutch(uart_ch, 0xFF);
 
   printf("start\n");
 
-  pre_time = millis();
-  while(uart_is_open)
+  if (bootPing())
   {
-    if (uartAvailable(uart_ch) > 0)
-    {
-      printf("rx : 0x%X\n", uartRead(uart_ch));
-      pre_time = millis();
-    }
+    printf("Ping : OK\n");
 
-    if (millis()-pre_time >= 100)
-    {
-      break;
-    }
+    bool ret;
+    resp_get_t resp_get;
+    resp_get_option_t resp_get_option;
+    resp_get_id_t resp_get_id;
+
+    ret = bootGet(&resp_get);
+    ret = bootGetOption(&resp_get_option);
+    ret = bootGetID(&resp_get_id);
+  }
+  else
+  {
+    printf("Ping : Fail\n");
   }
 
   printf("end\n");
-
-  if (uart_is_open == false)
-  {
-    return;
-  }
 }
