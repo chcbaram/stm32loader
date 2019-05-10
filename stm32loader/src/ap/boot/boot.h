@@ -33,6 +33,10 @@
 #define BOOT_ERR_CMD_EX_ERASE       19
 #define BOOT_ERR_INVAILD_ADDR       20
 #define BOOT_ERR_ERASE_TIMEOUT      21
+#define BOOT_ERR_CMD_ERASE          22
+#define BOOT_ERR_NOT_ERASE_CMD      23
+#define BOOT_ERR_CMD_WRITE_UNPROTECT 24
+#define BOOT_ERR_CMD_READ_UNPROTECT 25
 
 typedef struct
 {
@@ -74,7 +78,10 @@ bool bootOpen(char *port, uint32_t baud);
 bool bootClose(void);
 void bootPrintError(void);
 void bootLogEnable(bool enable);
+bool bootIsSupportMCU(void);
 bool bootPing(void);
+bool bootWriteUnprotect(void);
+bool bootReadUnprotect(void);
 bool bootGetBoardName(char *board_char);
 bool bootGetBootVersion(uint8_t *p_version);
 bool bootGet(resp_get_t *p_resp);
@@ -84,6 +91,7 @@ bool bootReadMemory(uint32_t addr, uint8_t *p_data, uint32_t length);
 bool bootGo(uint32_t addr);
 bool bootErase(uint32_t addr, uint32_t length, uint32_t timeout);
 bool bootExtendedErase(uint32_t addr, uint32_t length, uint32_t timeout);
+bool bootEraseMemory(uint32_t addr, uint32_t length, uint32_t timeout);
 bool bootWriteMemory(uint32_t addr, uint8_t *p_data, uint32_t length, uint32_t timeout);
 
 uint32_t bootGetLastError(void);

@@ -37,6 +37,7 @@ void apMain(int argc, char *argv[])
   uint32_t flash_addr;
   uint8_t jump_flag;
   uint8_t log_print = 0;
+  uint8_t retry_cnt = 0;
 
   if (argc != 6 && argc != 7)
   {
@@ -104,6 +105,27 @@ void apMain(int argc, char *argv[])
       break;
     }
 
+    resp_get_id_t get_id;
+    if (bootGetID(&get_id) == true)
+    {
+      printf("PID       \t: 0x%03X\n", get_id.pid);
+    }
+    else
+    {
+      bootPrintError();
+      break;
+    }
+
+    if (bootIsSupportMCU() == true)
+    {
+      printf("Supported  \t: OK\n");
+    }
+    else
+    {
+      printf("Supported  \t: Not Support\n");
+      break;
+    }
+
 
     //-- Version
     //
@@ -127,13 +149,33 @@ void apMain(int argc, char *argv[])
 
     printf("timeout \t: %d ms\n", timeout);
     printf("erase fw \t: ");
-    if (bootExtendedErase(flash_addr, fw_size, timeout) == true)
+    if (bootEraseMemory(flash_addr, fw_size, timeout) == true)
     {
       printf(", OK\n");
     }
     else
     {
       bootPrintError();
+
+      if (retry_cnt == 0)
+      {
+        retry_cnt++;
+
+        //-- Read Unprotect
+        //
+        if (bootReadUnprotect() == true)
+        {
+          printf("ReadUnprotect \t: OK\n");
+        }
+        else
+        {
+          bootPrintError();
+          break;
+        }
+        delay(100);
+        continue;
+      }
+      retry_cnt++;
       break;
     }
 

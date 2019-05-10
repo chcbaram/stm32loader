@@ -45,6 +45,7 @@ typedef struct
 
 extern device_info_t *stm32_pid_449_info();
 extern device_info_t *stm32_pid_410_info();
+extern device_info_t *stm32_pid_414_info();
 
 device_tbl_t device_tbl[] =
     {
@@ -54,8 +55,8 @@ device_tbl_t device_tbl[] =
         {0x445, "STM32F05xxx",              NULL},
 
         {0x410, "STM32F10xxx_Medium-density", stm32_pid_410_info},
-        {0x414, "STM32F10xxx_High-density", NULL},
-        {0x449, "STM32F74xxx/75xxx",        stm32_pid_449_info},
+        {0x414, "STM32F10xxx_High-density",   stm32_pid_414_info},
+        {0x449, "STM32F74xxx/75xxx",          stm32_pid_449_info},
         {0x000, " ", NULL},
     };
 
@@ -228,6 +229,34 @@ device_tbl_t *bootGetDevice(uint16_t pid)
   }
 
   return p_ret;
+}
+
+bool bootIsSupportMCU(void)
+{
+  resp_get_id_t resp_get_id;
+  device_tbl_t *p_device;
+
+
+  if (bootGetID(&resp_get_id) != true)
+  {
+    last_error = BOOT_ERR_CMD_GET_ID;
+    return false;
+  }
+
+  p_device = bootGetDevice(resp_get_id.pid);
+  if (p_device == NULL)
+  {
+    last_error = BOOT_ERR_NOT_SUPPORT;
+    return false;
+  }
+
+  if (p_device->p_info == NULL)
+  {
+    last_error = BOOT_ERR_NOT_SUPPORT;
+    return false;
+  }
+
+  return true;
 }
 
 bool bootSendCmd(enum BootCmd cmd, uint32_t timeout)
@@ -649,6 +678,74 @@ bool bootGetID(resp_get_id_t *p_resp)
   return ret;
 }
 
+bool bootWriteUnprotect(void)
+{
+  bool ret = true;
+
+
+  if (is_open != true)
+  {
+    last_error = BOOT_ERR_FAIL_OPEN;
+    return false;
+  }
+
+  if (is_log == true)
+  {
+    printf("# bootWriteUnprotect()\n");
+  }
+  bootFlush();
+
+
+  if (bootSendCmd(Cmd_Write_Unprotect, 100) == true)
+  {
+    if (bootWaitAck(500) != true)
+    {
+      return false;
+    }
+  }
+  else
+  {
+    last_error = BOOT_ERR_CMD_WRITE_UNPROTECT;
+    return false;
+  }
+
+  return ret;
+}
+
+bool bootReadUnprotect(void)
+{
+  bool ret = true;
+
+
+  if (is_open != true)
+  {
+    last_error = BOOT_ERR_FAIL_OPEN;
+    return false;
+  }
+
+  if (is_log == true)
+  {
+    printf("# bootReadUnprotect()\n");
+  }
+  bootFlush();
+
+
+  if (bootSendCmd(Cmd_Readout_Unprotect, 100) == true)
+  {
+    if (bootWaitAck(500) != true)
+    {
+      return false;
+    }
+  }
+  else
+  {
+    last_error = BOOT_ERR_CMD_READ_UNPROTECT;
+    return false;
+  }
+
+  return ret;
+}
+
 bool bootReadMemory(uint32_t addr, uint8_t *p_data, uint32_t length)
 {
   bool ret = true;
@@ -889,6 +986,127 @@ bool bootGetFlashInfo(uint16_t pid, uint32_t addr, uint32_t length, flash_info_t
   return ret;
 }
 
+bool bootEraseMemory(uint32_t addr, uint32_t length, uint32_t timeout)
+{
+  resp_get_t resp_get;
+
+
+  if (bootGet(&resp_get) != true)
+  {
+    last_error = BOOT_ERR_CMD_ERASE;
+    return false;
+  }
+
+  if (resp_get.support_erase == true)
+  {
+    return bootErase(addr, length, timeout);
+  }
+  else
+  {
+    return bootExtendedErase(addr, length, timeout);
+  }
+}
+
+bool bootErase(uint32_t addr, uint32_t length, uint32_t timeout)
+{
+  bool ret = true;
+  uint8_t tx_buf[8];
+  resp_get_t resp_get;
+  resp_get_id_t resp_get_id;
+  device_tbl_t *p_device;
+  uint32_t i;
+  flash_info_t flash_info;
+
+  if (is_open != true)
+  {
+    last_error = BOOT_ERR_FAIL_OPEN;
+    return false;
+  }
+
+  if (is_log == true)
+  {
+    printf("# bootErase()\n");
+  }
+  bootFlush();
+
+
+  if (bootGet(&resp_get) != true)
+  {
+    last_error = BOOT_ERR_CMD_ERASE;
+    return false;
+  }
+
+  if (resp_get.support_erase != true)
+  {
+    last_error = BOOT_ERR_NOT_ERASE_CMD;
+    return false;
+  }
+
+  if (bootGetID(&resp_get_id) != true)
+  {
+    last_error = BOOT_ERR_CMD_GET_ID;
+    return false;
+  }
+
+  p_device = bootGetDevice(resp_get_id.pid);
+  if (p_device == NULL)
+  {
+    last_error = BOOT_ERR_NOT_SUPPORT;
+    return false;
+  }
+
+
+  if (bootGetFlashInfo(resp_get_id.pid, addr, length, &flash_info) != true)
+  {
+    return false;
+  }
+
+
+  if (bootSendCmd(Cmd_Erase, 100) == true)
+  {
+    uint8_t checksum = 0;
+
+    tx_buf[0] = ((flash_info.pages-1) >>  0) & 0xFF;
+    if (bootWriteData(tx_buf, 1, 100) != true)
+    {
+      last_error = BOOT_ERR_WRITE_ADDR;
+      return false;
+    }
+    checksum ^= tx_buf[0];
+
+    for (i=0; i<flash_info.pages; i++)
+    {
+      tx_buf[0] = (flash_info.number[i] >>  0) & 0xFF;
+      if (bootWriteData(tx_buf, 1, 100) != true)
+      {
+        last_error = BOOT_ERR_WRITE_ADDR;
+        return false;
+      }
+      checksum ^= tx_buf[0];
+    }
+
+    tx_buf[0] = checksum;
+    if (bootWriteData(tx_buf, 1, 100) != true)
+    {
+      last_error = BOOT_ERR_WRITE_ADDR;
+      return false;
+    }
+
+    if (bootWaitAck(timeout, true) != true)
+    {
+      last_error = BOOT_ERR_ERASE_TIMEOUT;
+      return false;
+    }
+  }
+  else
+  {
+    last_error = BOOT_ERR_CMD_ERASE;
+    return false;
+  }
+
+  return ret;
+}
+
 bool bootExtendedErase(uint32_t addr, uint32_t length, uint32_t timeout)
 {
   bool ret = true;
@@ -896,8 +1114,6 @@ bool bootExtendedErase(uint32_t addr, uint32_t length, uint32_t timeout)
   resp_get_t resp_get;
   resp_get_id_t resp_get_id;
   device_tbl_t *p_device;
-  //uint16_t pages;
-  //uint16_t number[512];
   uint32_t i;
   flash_info_t flash_info;
 
