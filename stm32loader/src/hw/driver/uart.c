@@ -431,7 +431,18 @@ int32_t uartPrint(uint8_t channel, uint8_t *p_str)
 
 void uartFlush(uint8_t channel)
 {
+  uint32_t pre_time;
 
+  pre_time = millis();
+
+  while(uartAvailable(channel) > 0)
+  {
+    uartRead(channel);
+    if (millis()-pre_time >= 100)
+    {
+      break;
+    }
+  }
 }
 #endif
 

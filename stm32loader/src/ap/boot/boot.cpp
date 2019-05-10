@@ -38,20 +38,26 @@ typedef struct
 {
   uint16_t pid;
   char device_str[64];
+  device_info_t* (*p_info)();
+
 } device_tbl_t;
 
 
+extern device_info_t *stm32_pid_449_info();
+extern device_info_t *stm32_pid_410_info();
+
 device_tbl_t device_tbl[] =
     {
-        {0x440, "STM32F05xxx"},
-        {0x444, "STM32F03xx4/6"},
-        {0x442, "STM32F030C"},
-        {0x445, "STM32F05xxx"},
+        {0x440, "STM32F05xxx",              NULL},
+        {0x444, "STM32F03xx4/6",            NULL},
+        {0x442, "STM32F030C",               NULL},
+        {0x445, "STM32F05xxx",              NULL},
 
-        {0x414, "STM32F10xxx_High-density"},
-        {0x000, ""},
+        {0x410, "STM32F10xxx_Medium-density", stm32_pid_410_info},
+        {0x414, "STM32F10xxx_High-density", NULL},
+        {0x449, "STM32F74xxx/75xxx",        stm32_pid_449_info},
+        {0x000, " ", NULL},
     };
-
 
 
 
@@ -63,6 +69,12 @@ static uint32_t last_error = 0;
 
 
 static bool bootSendCmd(enum BootCmd cmd, uint32_t timeout);
+static bool bootWaitAck(uint32_t timeout, bool log_progress=false);
+static device_tbl_t *bootGetDevice(uint16_t pid);
+static bool bootGetFlashInfo(uint16_t pid, uint32_t addr, uint32_t length, flash_info_t *p_resp);
+static void bootFlush(void);
+
+
 
 
 
@@ -100,6 +112,80 @@ uint32_t bootGetLastError(void)
   return last_error;
 }
 
+void bootPrintError(void)
+{
+  printf("error_code \t: 0x%X(%d), ", last_error, last_error);
+
+  switch(last_error)
+  {
+    case BOOT_ERR_NOT_OPEN:
+      printf("BOOT_ERR_NOT_OPEN");
+      break;
+    case BOOT_ERR_FAIL_OPEN:
+      printf("BOOT_ERR_FAIL_OPEN");
+      break;
+    case BOOT_ERR_NACK:
+      printf("BOOT_ERR_NACK");
+      break;
+    case BOOT_ERR_NO_RESP:
+      printf("BOOT_ERR_NO_RESP");
+      break;
+    case BOOT_ERR_TIMEOUT:
+      printf("BOOT_ERR_TIMEOUT");
+      break;
+    case BOOT_ERR_WRITE_ADDR:
+      printf("BOOT_ERR_WRITE_ADDR");
+      break;
+    case BOOT_ERR_WRITE_ADDR_ACK:
+      printf("BOOT_ERR_WRITE_ADDR_ACK");
+      break;
+    case BOOT_ERR_WRITE_LEN:
+      printf("BOOT_ERR_WRITE_LEN");
+      break;
+    case BOOT_ERR_WRITE_LEN_ACK:
+      printf("BOOT_ERR_WRITE_LEN_ACK");
+      break;
+    case BOOT_ERR_WRITE_READ_DATA:
+      printf("BOOT_ERR_WRITE_READ_DATA");
+      break;
+    case BOOT_ERR_CMD_READ_MEMORY_RDP:
+      printf("BOOT_ERR_CMD_READ_MEMORY_RDP");
+      break;
+    case BOOT_ERR_CMD_GET:
+      printf("BOOT_ERR_CMD_GET");
+      break;
+    case BOOT_ERR_CMD_GET_ID:
+      printf("BOOT_ERR_CMD_GET_ID");
+      break;
+    case BOOT_ERR_CMD_GET_OPTION:
+      printf("BOOT_ERR_CMD_GET_OPTION");
+      break;
+    case BOOT_ERR_CMD_PING:
+      printf("BOOT_ERR_CMD_PING");
+      break;
+    case BOOT_ERR_NOT_EXTENDED_ERASE:
+      printf("BOOT_ERR_NOT_EXTENDED_ERASE");
+      break;
+    case BOOT_ERR_NOT_SUPPORT:
+      printf("BOOT_ERR_NOT_SUPPORT");
+      break;
+    case BOOT_ERR_CMD_GO:
+      printf("BOOT_ERR_CMD_GO");
+      break;
+    case BOOT_ERR_CMD_EX_ERASE:
+      printf("BOOT_ERR_CMD_EX_ERASE");
+      break;
+    case BOOT_ERR_INVAILD_ADDR:
+      printf("BOOT_ERR_INVAILD_ADDR");
+      break;
+    case BOOT_ERR_ERASE_TIMEOUT:
+      printf("BOOT_ERR_ERASE_TIMEOUT");
+      break;
+  }
+
+  printf("\n");
+}
+
 void bootPrintDevice(uint16_t pid)
 {
   uint16_t i;
@@ -109,7 +195,7 @@ void bootPrintDevice(uint16_t pid)
   {
     if (device_tbl[i].pid == pid)
     {
-      printf("devicde : %s\n", device_tbl[i].device_str);
+      printf("%s", device_tbl[i].device_str);
     }
     if (device_tbl[i].pid == 0)
     {
@@ -119,6 +205,31 @@ void bootPrintDevice(uint16_t pid)
     i++;
   }
 }
+
+device_tbl_t *bootGetDevice(uint16_t pid)
+{
+  uint16_t i;
+  device_tbl_t *p_ret = NULL;
+
+  i = 0;
+  while(1)
+  {
+    if (device_tbl[i].pid == pid)
+    {
+      p_ret = &device_tbl[i];
+      break;
+    }
+    if (device_tbl[i].pid == 0)
+    {
+      break;
+    }
+
+    i++;
+  }
+
+  return p_ret;
+}
+
 bool bootSendCmd(enum BootCmd cmd, uint32_t timeout)
 {
   uint32_t pre_time;
@@ -196,7 +307,10 @@ bool bootReadData(uint8_t *p_data, uint32_t length, uint32_t timeout)
     {
       read_byte = uartRead(uart_ch);
 
-      printf("     0x%02X\n", read_byte);
+      if (is_log)
+      {
+        printf("     0x%02X\n", read_byte);
+      }
 
       if (p_data != NULL)
       {
@@ -220,6 +334,85 @@ bool bootReadData(uint8_t *p_data, uint32_t length, uint32_t timeout)
   return ret;
 }
 
+bool bootWriteData(uint8_t *p_data, uint32_t length, uint32_t timeout)
+{
+  bool ret = false;
+
+  if (uartWrite(uart_ch, p_data, length) == (int32_t)length)
+  {
+    ret = true;
+  }
+
+  return ret;
+}
+
+bool bootWaitAck(uint32_t timeout, bool log_progress)
+{
+  uint32_t pre_time;
+  uint32_t pre_time_cnt;
+  uint8_t  rx_byte;
+  bool ret = false;
+
+  if (log_progress == true)
+  {
+    printf("#");
+  }
+
+  pre_time = millis();
+  pre_time_cnt = millis();
+  while(1)
+  {
+    if (uartAvailable(uart_ch) > 0)
+    {
+      rx_byte = uartRead(uart_ch);
+
+      if (rx_byte == Resp_ACK)
+      {
+        ret = true;
+      }
+      if (rx_byte == Resp_NACK)
+      {
+        last_error = BOOT_ERR_NACK;
+      }
+
+      if (is_log == true)
+      {
+        printf("<- RespCmd : 0x%02X\n", rx_byte);
+      }
+
+      break;
+    }
+
+    if (millis()-pre_time >= timeout)
+    {
+      last_error = BOOT_ERR_NO_RESP;
+      break;
+    }
+
+    if (millis()-pre_time_cnt >= 1000)
+    {
+      pre_time_cnt = millis();
+
+      if (log_progress == true)
+      {
+        printf("#");
+      }
+    }
+  }
+
+  return ret;
+}
+
+void bootFlush(void)
+{
+  uartFlush(uart_ch);
+}
+
+void bootLogEnable(bool enable)
+{
+  is_log = enable;
+}
+
 bool bootPing(void)
 {
   if (is_open != true)
@@ -228,8 +421,65 @@ bool bootPing(void)
     return false;
   }
 
+  if (is_log == true)
+  {
+    printf("# bootPing()\n");
+  }
 
-  return bootSendCmd(Cmd_Ping, 100);
+  if (bootSendCmd(Cmd_Ping, 100) != true)
+  {
+    last_error = BOOT_ERR_CMD_PING;
+    return false;
+  }
+
+  return true;
+}
+
+bool bootGetBoardName(char *board_str)
+{
+  resp_get_id_t resp_get_id;
+  resp_get_option_t resp_get_option;
+  device_tbl_t *p_device;
+
+
+  if (bootGetOption(&resp_get_option) != true)
+  {
+    last_error = BOOT_ERR_CMD_GET_OPTION;
+    return false;
+  }
+
+  if (bootGetID(&resp_get_id) != true)
+  {
+    last_error = BOOT_ERR_CMD_GET_ID;
+    return false;
+  }
+
+  p_device = bootGetDevice(resp_get_id.pid);
+  if (p_device == NULL)
+  {
+    last_error = BOOT_ERR_NOT_SUPPORT;
+    return false;
+  }
+
+  strcpy(board_str, p_device->device_str);
+
+  return true;
+}
+
+
+bool bootGetBootVersion(uint8_t *p_version)
+{
+  resp_get_t resp_get;
+
+  if (bootGet(&resp_get) != true)
+  {
+    last_error = BOOT_ERR_CMD_GET;
+    return false;
+  }
+
+  *p_version = resp_get.boot_version;
+
+  return true;
 }
 
 bool bootGet(resp_get_t *p_resp)
@@ -241,6 +491,12 @@ bool bootGet(resp_get_t *p_resp)
     last_error = BOOT_ERR_FAIL_OPEN;
     return false;
   }
+
+  if (is_log == true)
+  {
+    printf("# bootGet()\n");
+  }
+  bootFlush();
 
 
   if (bootSendCmd(Cmd_Get, 100) == true)
@@ -257,6 +513,20 @@ bool bootGet(resp_get_t *p_resp)
     {
       return false;
     }
+
+    p_resp->support_erase = false;
+    for (int i=0; i<p_resp->length; i++)
+    {
+      if (p_resp->supported_cmd[i] == Cmd_Erase)
+      {
+        p_resp->support_erase = true;
+      }
+    }
+  }
+  else
+  {
+    last_error = BOOT_ERR_CMD_GET;
+    return false;
   }
 
 
@@ -283,6 +553,12 @@ bool bootGetOption(resp_get_option_t *p_resp)
     return false;
   }
 
+  if (is_log == true)
+  {
+    printf("# bootGetOption()\n");
+  }
+  bootFlush();
+
 
   if (bootSendCmd(Cmd_Get_Version, 100) == true)
   {
@@ -303,7 +579,11 @@ bool bootGetOption(resp_get_option_t *p_resp)
       return false;
     }
   }
-
+  else
+  {
+    last_error = BOOT_ERR_CMD_GET_OPTION;
+    return false;
+  }
 
   if (is_log == true)
   {
@@ -327,13 +607,15 @@ bool bootGetID(resp_get_id_t *p_resp)
     return false;
   }
 
+  if (is_log == true)
+  {
+    printf("# bootGetID()\n");
+  }
+  bootFlush();
+
 
   if (bootSendCmd(Cmd_Get_ID, 100) == true)
   {
-    if (bootReadData(NULL, 1, 100) != true) // ACK
-    {
-      return false;
-    }
     if (bootReadData(&len, 1, 100) != true || len != 1)
     {
       return false;
@@ -349,13 +631,484 @@ bool bootGetID(resp_get_id_t *p_resp)
       return false;
     }
   }
+  else
+  {
+    last_error = BOOT_ERR_CMD_GET_ID;
+    return false;
+  }
 
 
   if (is_log == true)
   {
     printf("<- PID : 0x%04X\n", p_resp->pid);
+    printf("\n");
     bootPrintDevice(p_resp->pid);
+    printf("\n");
   }
 
   return ret;
 }
+
+bool bootReadMemory(uint32_t addr, uint8_t *p_data, uint32_t length)
+{
+  bool ret = true;
+  uint16_t rx_len;
+  uint8_t tx_buf[8];
+  uint32_t rx_addr;
+  uint32_t sent_len;
+  bool log_save;
+
+
+  if (is_open != true)
+  {
+    last_error = BOOT_ERR_FAIL_OPEN;
+    return false;
+  }
+
+  if (is_log == true)
+  {
+    printf("# bootReadMemoy()\n");
+  }
+  bootFlush();
+
+  rx_addr = addr;
+  sent_len = 0;
+  while(sent_len < length)
+  {
+
+    if ((length-sent_len) > 256)
+    {
+      rx_len = 256;
+    }
+    else
+    {
+      rx_len = length-sent_len;
+    }
+    sent_len += rx_len;
+
+    if (bootSendCmd(Cmd_Read_Memory, 100) == true)
+    {
+      tx_buf[0] = (rx_addr >> 24) & 0xFF;
+      tx_buf[1] = (rx_addr >> 16) & 0xFF;
+      tx_buf[2] = (rx_addr >>  8) & 0xFF;
+      tx_buf[3] = (rx_addr >>  0) & 0xFF;
+      tx_buf[4] = 0;
+      for (int i=0; i<4; i++)
+      {
+        tx_buf[4] ^= tx_buf[i];
+      }
+
+      if (bootWriteData(tx_buf, 5, 100) != true)
+      {
+        last_error = BOOT_ERR_WRITE_ADDR;
+        return false;
+      }
+      if (bootWaitAck(100) != true)
+      {
+        last_error = BOOT_ERR_WRITE_ADDR_ACK;
+        return false;
+      }
+
+      tx_buf[0] = (rx_len - 1);
+      tx_buf[1] = ~(rx_len - 1);
+      if (bootWriteData(tx_buf, 2, 100) != true)
+      {
+        last_error = BOOT_ERR_WRITE_LEN;
+        return false;
+      }
+
+      if (bootWaitAck(100) != true)
+      {
+        last_error = BOOT_ERR_WRITE_LEN_ACK;
+        return false;
+      }
+
+      log_save = is_log;
+      is_log = false;
+      if (bootReadData(p_data, rx_len, 100) != true)
+      {
+        is_log = log_save;
+        last_error = BOOT_ERR_WRITE_READ_DATA;
+        return false;
+      }
+      is_log = log_save;
+    }
+    else
+    {
+      last_error = BOOT_ERR_CMD_READ_MEMORY_RDP;
+      return false;
+    }
+
+
+    if (is_log == true)
+    {
+      printf("<- addr : 0x%X\n", rx_addr);
+      printf("<- len  : %d\n", rx_len);
+    }
+
+    rx_addr += rx_len;
+  }
+
+
+  return ret;
+}
+
+bool bootGo(uint32_t addr)
+{
+  bool ret = true;
+  uint8_t tx_buf[8];
+
+
+  if (is_open != true)
+  {
+    last_error = BOOT_ERR_FAIL_OPEN;
+    return false;
+  }
+
+  if (is_log == true)
+  {
+    printf("# bootGo()\n");
+  }
+  bootFlush();
+
+
+  if (bootSendCmd(Cmd_Go, 100) == true)
+  {
+    tx_buf[0] = (addr >> 24) & 0xFF;
+    tx_buf[1] = (addr >> 16) & 0xFF;
+    tx_buf[2] = (addr >>  8) & 0xFF;
+    tx_buf[3] = (addr >>  0) & 0xFF;
+    tx_buf[4] = 0;
+    for (int i=0; i<4; i++)
+    {
+      tx_buf[4] ^= tx_buf[i];
+    }
+
+    if (bootWriteData(tx_buf, 5, 100) != true)
+    {
+      last_error = BOOT_ERR_WRITE_ADDR;
+      return false;
+    }
+    if (bootWaitAck(100) != true)
+    {
+      last_error = BOOT_ERR_WRITE_ADDR_ACK;
+      return false;
+    }
+  }
+  else
+  {
+    last_error = BOOT_ERR_CMD_GO;
+    return false;
+  }
+
+  if (is_log == true)
+  {
+    printf("<- addr : 0x%X\n", addr);
+  }
+
+  return ret;
+}
+
+bool bootGetFlashInfo(uint16_t pid, uint32_t addr, uint32_t length, flash_info_t *p_resp)
+{
+  bool ret = true;
+  device_tbl_t *p_device;
+  uint32_t i;
+  device_info_t *p_info;
+
+
+  p_device = bootGetDevice(pid);
+  if (p_device == NULL)
+  {
+    last_error = BOOT_ERR_NOT_SUPPORT;
+    return false;
+  }
+
+  if (p_device->p_info == NULL)
+  {
+    last_error = BOOT_ERR_NOT_SUPPORT;
+    return false;
+  }
+
+
+  p_info = p_device->p_info();
+  i = 0;
+  p_resp->pages = 0;
+
+  while(p_info[i].sector_index >= 0)
+  {
+    bool need_erase;
+    uint32_t start_sector_addr;
+    uint32_t end_sector_addr;
+    uint32_t start_addr;
+    uint32_t end_addr;
+
+    need_erase = false;
+    start_sector_addr = p_info[i].sector_addr;
+    end_sector_addr = p_info[i].sector_addr + p_info[i].sector_length - 1;
+    start_addr = addr;
+    end_addr = addr + length - 1;
+
+    if (start_addr >= start_sector_addr && start_addr <= end_sector_addr)
+    {
+      need_erase = true;
+    }
+    if (end_addr >= start_sector_addr && end_addr <= end_sector_addr)
+    {
+      need_erase = true;
+    }
+    if (start_sector_addr >= start_addr && start_sector_addr <= end_addr)
+    {
+      need_erase = true;
+    }
+    if (end_sector_addr >= start_addr && end_sector_addr <= end_addr)
+    {
+      need_erase = true;
+    }
+
+    if (need_erase == true)
+    {
+      p_resp->number[p_resp->pages++] = p_info[i].sector_index;
+
+      if (is_log == true)
+      {
+        printf("-> Page : %d\n", p_info[i].sector_index);
+        printf("<- Addr : 0x%X\n", p_info[i].sector_addr);
+      }
+    }
+
+    i++;
+  }
+
+  if (p_resp->pages == 0)
+  {
+    last_error = BOOT_ERR_INVAILD_ADDR;
+    return false;
+  }
+
+  return ret;
+}
+
+bool bootExtendedErase(uint32_t addr, uint32_t length, uint32_t timeout)
+{
+  bool ret = true;
+  uint8_t tx_buf[8];
+  resp_get_t resp_get;
+  resp_get_id_t resp_get_id;
+  device_tbl_t *p_device;
+  //uint16_t pages;
+  //uint16_t number[512];
+  uint32_t i;
+  flash_info_t flash_info;
+
+  if (is_open != true)
+  {
+    last_error = BOOT_ERR_FAIL_OPEN;
+    return false;
+  }
+
+  if (is_log == true)
+  {
+    printf("# bootExtendedErase()\n");
+  }
+  bootFlush();
+
+
+  if (bootGet(&resp_get) != true)
+  {
+    last_error = BOOT_ERR_CMD_GET;
+    return false;
+  }
+
+  if (resp_get.support_erase == true)
+  {
+    last_error = BOOT_ERR_NOT_EXTENDED_ERASE;
+    return false;
+  }
+
+  if (bootGetID(&resp_get_id) != true)
+  {
+    last_error = BOOT_ERR_CMD_GET_ID;
+    return false;
+  }
+
+  p_device = bootGetDevice(resp_get_id.pid);
+  if (p_device == NULL)
+  {
+    last_error = BOOT_ERR_NOT_SUPPORT;
+    return false;
+  }
+
+
+  if (bootGetFlashInfo(resp_get_id.pid, addr, length, &flash_info) != true)
+  {
+    return false;
+  }
+
+
+  if (bootSendCmd(Cmd_Extended_Erase, 100) == true)
+  {
+    uint8_t checksum = 0;
+
+    tx_buf[0] = ((flash_info.pages-1) >>  8) & 0xFF;
+    tx_buf[1] = ((flash_info.pages-1) >>  0) & 0xFF;
+    if (bootWriteData(tx_buf, 2, 100) != true)
+    {
+      last_error = BOOT_ERR_WRITE_ADDR;
+      return false;
+    }
+    checksum ^= tx_buf[0];
+    checksum ^= tx_buf[1];
+
+    for (i=0; i<flash_info.pages; i++)
+    {
+      tx_buf[0] = (flash_info.number[i] >>  8) & 0xFF;
+      tx_buf[1] = (flash_info.number[i] >>  0) & 0xFF;
+      if (bootWriteData(tx_buf, 2, 100) != true)
+      {
+        last_error = BOOT_ERR_WRITE_ADDR;
+        return false;
+      }
+      checksum ^= tx_buf[0];
+      checksum ^= tx_buf[1];
+    }
+
+    tx_buf[0] = checksum;
+    if (bootWriteData(tx_buf, 1, 100) != true)
+    {
+      last_error = BOOT_ERR_WRITE_ADDR;
+      return false;
+    }
+
+    if (bootWaitAck(timeout, true) != true)
+    {
+      last_error = BOOT_ERR_ERASE_TIMEOUT;
+      return false;
+    }
+  }
+  else
+  {
+    last_error = BOOT_ERR_CMD_EX_ERASE;
+    return false;
+  }
+
+  return ret;
+}
+
+bool bootWriteMemory(uint32_t addr, uint8_t *p_data, uint32_t length, uint32_t timeout)
+{
+  bool ret = true;
+  uint16_t tx_len;
+  uint8_t tx_buf[256+2];
+  uint32_t tx_addr;
+  uint32_t sent_len;
+  uint8_t checksum;
+  int i;
+  uint32_t block_size;
+  int32_t  block_count = -1;
+
+
+  if (is_open != true)
+  {
+    last_error = BOOT_ERR_FAIL_OPEN;
+    return false;
+  }
+
+  if (is_log == true)
+  {
+    printf("# bootWriteMemoy()\n");
+  }
+  bootFlush();
+
+  block_size = length / 10;
+  if (block_size == 0)
+  {
+    block_size = 1;
+  }
+
+  tx_addr = addr;
+  sent_len = 0;
+  while(sent_len < length)
+  {
+
+    if ((length-sent_len) > 256)
+    {
+      tx_len = 256;
+    }
+    else
+    {
+      tx_len = length-sent_len;
+    }
+
+    if (bootSendCmd(Cmd_Write_Memory, 100) == true)
+    {
+      tx_buf[0] = (tx_addr >> 24) & 0xFF;
+      tx_buf[1] = (tx_addr >> 16) & 0xFF;
+      tx_buf[2] = (tx_addr >>  8) & 0xFF;
+      tx_buf[3] = (tx_addr >>  0) & 0xFF;
+      tx_buf[4] = 0;
+      for (i=0; i<4; i++)
+      {
+        tx_buf[4] ^= tx_buf[i];
+      }
+
+      if (bootWriteData(tx_buf, 5, 100) != true)
+      {
+        last_error = BOOT_ERR_WRITE_ADDR;
+        return false;
+      }
+      if (bootWaitAck(100) != true)
+      {
+        last_error = BOOT_ERR_WRITE_ADDR_ACK;
+        return false;
+      }
+
+      checksum = 0;
+      tx_buf[0] = (tx_len - 1);
+      checksum ^= tx_buf[0];
+      for (i=0; i<tx_len; i++)
+      {
+        tx_buf[1+i] = p_data[sent_len + i];
+        checksum ^= tx_buf[1+i];
+      }
+      tx_buf[1+i] = checksum;
+
+      if (bootWriteData(tx_buf, 2+tx_len, 100) != true)
+      {
+        last_error = BOOT_ERR_WRITE_LEN;
+        return false;
+      }
+
+      if (bootWaitAck(timeout) != true)
+      {
+        last_error = BOOT_ERR_WRITE_LEN_ACK;
+        return false;
+      }
+    }
+    else
+    {
+      last_error = BOOT_ERR_CMD_READ_MEMORY_RDP;
+      return false;
+    }
+
+
+    if (is_log == true)
+    {
+      printf("<- addr : 0x%X\n", tx_addr);
+      printf("<- len  : %d\n", tx_len);
+    }
+
+    if ((int32_t)(sent_len/block_size) != block_count)
+    {
+      block_count++;
+      printf("%d%% ", block_count * 10);
+    }
+
+    tx_addr  += tx_len;
+    sent_len += tx_len;
+  }
+
+
+  return ret;
+}
+
