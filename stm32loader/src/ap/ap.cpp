@@ -38,6 +38,7 @@ void apMain(int argc, char *argv[])
   uint8_t jump_flag;
   uint8_t log_print = 0;
   uint8_t retry_cnt = 0;
+  uint8_t retry;
 
   if (argc != 6 && argc != 7)
   {
@@ -79,16 +80,27 @@ void apMain(int argc, char *argv[])
 
   bootLogEnable(log_print);
 
+  retry = 3;
 
-  if (bootPing() == true)
+  while(1)
   {
-    printf("bootPing \t: OK\n");
-  }
-  else
-  {
-    printf("bootPing \t: Fail\n");
-    bootClose();
-    return;
+    if (bootPing() == true)
+    {
+      printf("bootPing \t: OK\n");
+      break;
+    }
+    else
+    {
+      printf("bootPing \t: Fail\n");
+
+      if (retry == 0)
+      {
+        bootClose();
+        return;
+      }
+
+      retry--;
+    }
   }
 
   while(1)

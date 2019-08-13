@@ -46,6 +46,7 @@ typedef struct
 extern device_info_t *stm32_pid_449_info();
 extern device_info_t *stm32_pid_410_info();
 extern device_info_t *stm32_pid_414_info();
+extern device_info_t *stm32_pid_450_info();
 
 device_tbl_t device_tbl[] =
     {
@@ -57,6 +58,8 @@ device_tbl_t device_tbl[] =
         {0x410, "STM32F10xxx_Medium-density", stm32_pid_410_info},
         {0x414, "STM32F10xxx_High-density",   stm32_pid_414_info},
         {0x449, "STM32F74xxx/75xxx",          stm32_pid_449_info},
+        {0x450, "STM32H74xxx/75xxx",          stm32_pid_450_info},
+
         {0x000, " ", NULL},
     };
 
@@ -455,7 +458,7 @@ bool bootPing(void)
     printf("# bootPing()\n");
   }
 
-  if (bootSendCmd(Cmd_Ping, 100) != true)
+  if (bootSendCmd(Cmd_Ping, 500) != true)
   {
     last_error = BOOT_ERR_CMD_PING;
     return false;
