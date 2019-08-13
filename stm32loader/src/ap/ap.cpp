@@ -42,6 +42,7 @@ void apMain(int argc, char *argv[])
 
   if (argc != 6 && argc != 7)
   {
+    printf("stm32loader port baud flash_addr file_name jump[0|1] debug[0|1]\n\n");
     return;
   }
 
