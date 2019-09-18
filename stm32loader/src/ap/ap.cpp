@@ -40,6 +40,10 @@ void apMain(int argc, char *argv[])
   uint8_t retry_cnt = 0;
   uint8_t retry;
 
+
+  setbuf(stdout, NULL);
+
+
   if (argc != 6 && argc != 7)
   {
     printf("stm32loader port baud flash_addr file_name jump[0|1] debug[0|1]\n\n");
@@ -145,7 +149,7 @@ void apMain(int argc, char *argv[])
     uint8_t version;
     if (bootGetBootVersion(&version) == true)
     {
-      printf("BotoVersion \t: %d.%d\n", version>>4, version&0x0F);
+      printf("BootVersion \t: %d.%d\n", version>>4, version&0x0F);
     }
     else
     {
