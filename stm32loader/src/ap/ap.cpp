@@ -244,13 +244,16 @@ void apMain(int argc, char *argv[])
     {
       uint32_t jump_addr;
 
-      printf("jump fw \t: ");
+      printf("jump addr \t: ");
 
       if (bootReadMemory(flash_addr + 4, (uint8_t *)&jump_addr, 4) != true)
       {
         bootPrintError();
         break;
       }
+
+      printf("0x%X\n", jump_addr);
+      printf("jump fw \t: ");
       if (bootGo(jump_addr) == true)
       {
         printf("OK\n");

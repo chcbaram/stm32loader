@@ -47,6 +47,8 @@ extern device_info_t *stm32_pid_449_info();
 extern device_info_t *stm32_pid_410_info();
 extern device_info_t *stm32_pid_414_info();
 extern device_info_t *stm32_pid_450_info();
+extern device_info_t *stm32_pid_453_info();
+
 
 device_tbl_t device_tbl[] =
     {
@@ -59,6 +61,8 @@ device_tbl_t device_tbl[] =
         {0x414, "STM32F10xxx_High-density",   stm32_pid_414_info},
         {0x449, "STM32F74xxx/75xxx",          stm32_pid_449_info},
         {0x450, "STM32H74xxx/75xxx",          stm32_pid_450_info},
+        {0x453, "STM32C03xxx",                stm32_pid_453_info},
+
 
         {0x000, " ", NULL},
     };
@@ -118,7 +122,7 @@ uint32_t bootGetLastError(void)
 
 void bootPrintError(void)
 {
-  printf("error_code \t: 0x%X(%d), ", last_error, last_error);
+  printf("Fail\nerror_code \t: 0x%X(%d), ", last_error, last_error);
 
   switch(last_error)
   {
@@ -300,14 +304,15 @@ bool bootSendCmd(enum BootCmd cmd, uint32_t timeout)
       {
         ret = true;
       }
-      if (resp_byte == Resp_NACK)
-      {
-        last_error = BOOT_ERR_NACK;
-      }
 
       if (is_log == true)
       {
         printf("<- RespCmd : 0x%02X\n", resp_byte);
+      }
+
+      if (resp_byte == Resp_NACK)
+      {
+        last_error = BOOT_ERR_NACK;
       }
 
       break;
@@ -458,10 +463,13 @@ bool bootPing(void)
     printf("# bootPing()\n");
   }
 
-  if (bootSendCmd(Cmd_Ping, 500) != true)
+  if (bootSendCmd(Cmd_Ping, 100) != true)
   {
-    last_error = BOOT_ERR_CMD_PING;
-    return false;
+    if (last_error != BOOT_ERR_NACK)
+    {
+      last_error = BOOT_ERR_CMD_PING;
+      return false;
+    }
   }
 
   return true;
@@ -701,10 +709,10 @@ bool bootWriteUnprotect(void)
 
   if (bootSendCmd(Cmd_Write_Unprotect, 100) == true)
   {
-    if (bootWaitAck(500) != true)
+    if (bootWaitAck(100) != true)
     {
       return false;
-    }
+    }   
   }
   else
   {
@@ -735,7 +743,7 @@ bool bootReadUnprotect(void)
 
   if (bootSendCmd(Cmd_Readout_Unprotect, 100) == true)
   {
-    if (bootWaitAck(500) != true)
+    if (bootWaitAck(100) != true)
     {
       return false;
     }
@@ -867,7 +875,7 @@ bool bootGo(uint32_t addr)
 
   if (is_log == true)
   {
-    printf("# bootGo()\n");
+    printf("# bootGo() : 0x%X\n", addr);
   }
   bootFlush();
 
@@ -891,7 +899,6 @@ bool bootGo(uint32_t addr)
     }
     if (bootWaitAck(100) != true)
     {
-      last_error = BOOT_ERR_WRITE_ADDR_ACK;
       return false;
     }
   }
@@ -1204,6 +1211,7 @@ bool bootExtendedErase(uint32_t addr, uint32_t length, uint32_t timeout)
       last_error = BOOT_ERR_ERASE_TIMEOUT;
       return false;
     }
+
   }
   else
   {
@@ -1276,6 +1284,7 @@ bool bootWriteMemory(uint32_t addr, uint8_t *p_data, uint32_t length, uint32_t t
         last_error = BOOT_ERR_WRITE_ADDR;
         return false;
       }
+    
       if (bootWaitAck(100) != true)
       {
         last_error = BOOT_ERR_WRITE_ADDR_ACK;
@@ -1306,7 +1315,7 @@ bool bootWriteMemory(uint32_t addr, uint8_t *p_data, uint32_t length, uint32_t t
     }
     else
     {
-      last_error = BOOT_ERR_CMD_READ_MEMORY_RDP;
+      last_error = BOOT_ERR_WRITE_ADDR;
       return false;
     }
 
@@ -1317,14 +1326,14 @@ bool bootWriteMemory(uint32_t addr, uint8_t *p_data, uint32_t length, uint32_t t
       printf("<- len  : %d\n", tx_len);
     }
 
+    tx_addr  += tx_len;
+    sent_len += tx_len;
+
     if ((int32_t)(sent_len/block_size) != block_count)
     {
       block_count++;
       printf("%d%% ", block_count * 10);
-    }
-
-    tx_addr  += tx_len;
-    sent_len += tx_len;
+    }    
   }
 
 
