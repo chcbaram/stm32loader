@@ -522,7 +522,7 @@ bool bootGetBootVersion(uint8_t *p_version)
   return true;
 }
 
-bool bootGet(resp_get_t *p_resp)
+bool bootGetStep(resp_get_t *p_resp)
 {
   bool ret = true;
 
@@ -583,6 +583,23 @@ bool bootGet(resp_get_t *p_resp)
   return ret;
 }
 
+bool bootGet(resp_get_t *p_resp)
+{
+  bool ret;
+
+  for (int i=0; i<3; i++)
+  {
+    bootFlush();
+    ret = bootGetStep(p_resp);
+    if (ret == true)
+      break;
+
+    delay(100);
+  }
+
+  return ret;
+}
+
 bool bootGetOption(resp_get_option_t *p_resp)
 {
   bool ret = true;
@@ -635,7 +652,7 @@ bool bootGetOption(resp_get_option_t *p_resp)
   return ret;
 }
 
-bool bootGetID(resp_get_id_t *p_resp)
+bool bootGetIDStep(resp_get_id_t *p_resp)
 {
   bool ret = true;
   uint8_t len = 0;
@@ -684,6 +701,23 @@ bool bootGetID(resp_get_id_t *p_resp)
     printf("\n");
     bootPrintDevice(p_resp->pid);
     printf("\n");
+  }
+
+  return ret;
+}
+
+bool bootGetID(resp_get_id_t *p_resp)
+{
+  bool ret;
+
+  for (int i=0; i<3; i++)
+  {
+    bootFlush();
+    ret = bootGetIDStep(p_resp);
+    if (ret == true)
+      break;
+
+    delay(100);
   }
 
   return ret;
