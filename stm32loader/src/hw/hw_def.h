@@ -12,6 +12,9 @@
 #include "def.h"
 
 
+
+#define _USE_HW_UART
+
 #define _USE_HW_DXL
 #define _USE_HW_DXLPORT
 #define _USE_HW_DXLCMD

@@ -97,7 +97,7 @@ bool bootOpen(char *port, uint32_t baud)
   uartSetPortName(uart_ch, port);
   uartSetParity(uart_ch, UART_PARITY_EVEN);
 
-  if (uartOpen(uart_ch, baud) == OK)
+  if (uartOpen(uart_ch, baud) == true)
   {
     is_open = true;
     ret = true;

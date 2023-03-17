@@ -1,5 +1,5 @@
 /*
- * uart.c
+ * uart_win.c
  *
  *  Created on: 2018. 6. 1.
  *      Author: HanCheol Cho
@@ -51,11 +51,12 @@ bool uartInit(void)
   return true;
 }
 
-uint32_t uartOpen(uint8_t channel, uint32_t baud)
+bool uartOpen(uint8_t channel, uint32_t baud)
 {
   uint32_t err_code  = OK;
   uart_t *p_uart = &uart_tbl[channel];
-
+  bool ret = false;
+  
   DCB dcb;
   COMMTIMEOUTS timeouts;
   DWORD dwError;
@@ -63,7 +64,7 @@ uint32_t uartOpen(uint8_t channel, uint32_t baud)
 
   if (channel >= UART_CH_MAX)
   {
-    return 1;
+    return false;
   }
 
 
@@ -71,13 +72,13 @@ uint32_t uartOpen(uint8_t channel, uint32_t baud)
   {
     p_uart->is_consol = true;
     p_uart->is_open = true;
-    return 0;
+    return true;
   }
 
 
   if (p_uart->is_set_port_name == false)
   {
-    return 2;
+    return false;
   }
 
   //strcpy(p_uart->port_name, port_name);
@@ -91,7 +92,7 @@ uint32_t uartOpen(uint8_t channel, uint32_t baud)
   if (p_uart->serial_handle == INVALID_HANDLE_VALUE)
   {
     printf("Error opening serial port!\n");
-    return 2;
+    return false;
   }
 
   while(1)
@@ -194,18 +195,21 @@ uint32_t uartOpen(uint8_t channel, uint32_t baud)
     p_uart->is_open = true;
   }
 
-  return err_code;
+  if (err_code == OK)
+    ret = true;
+
+  return ret;
 }
 
-uint32_t uartClose(uint8_t channel)
+bool uartClose(uint8_t channel)
 {
   uint32_t err_code  = OK;
   uart_t *p_uart = &uart_tbl[channel];
-
+  bool ret = false;
 
   if (channel >= UART_CH_MAX)
   {
-    return 1;
+    return false;
   }
 
   if (p_uart->is_open == true)
@@ -215,8 +219,10 @@ uint32_t uartClose(uint8_t channel)
     p_uart->is_open = false;
   }
 
+  if (err_code == OK)
+    ret = true;
 
-  return err_code;
+  return ret;
 }
 
 void uartSetPortName(uint8_t channel, char *port_name)

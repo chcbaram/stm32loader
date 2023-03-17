@@ -28,20 +28,21 @@ extern "C" {
 
 
 
-bool        uartInit(void);
-uint32_t    uartOpen(uint8_t channel, uint32_t baud);
-void        uartSetPortName(uint8_t channel, char *port_name);
-void        uartSetParity(uint8_t channel, uint8_t parity);
-uint32_t    uartClose(uint8_t channel);
-uint32_t    uartAvailable(uint8_t channel);
-void        uartWaitForEnable(uint8_t channel, uint32_t timeout);
-void        uartPutch(uint8_t channel, uint8_t ch);
-uint8_t     uartGetch(uint8_t channel);
-int32_t     uartWrite(uint8_t channel, uint8_t *p_data, uint32_t length);
-uint8_t     uartRead(uint8_t channel);
-int32_t     uartPrintf(uint8_t channel, const char *fmt, ...);
-int32_t     uartPrint(uint8_t channel, uint8_t *p_str);
-void        uartFlush(uint8_t channel);
+bool     uartInit(void);
+bool     uartOpen(uint8_t channel, uint32_t baud);
+void     uartSetPortName(uint8_t channel, char *port_name);
+void     uartSetParity(uint8_t channel, uint8_t parity);
+bool     uartClose(uint8_t channel);
+uint32_t uartAvailable(uint8_t channel);
+void     uartWaitForEnable(uint8_t channel, uint32_t timeout);
+void     uartPutch(uint8_t channel, uint8_t ch);
+uint8_t  uartGetch(uint8_t channel);
+int32_t  uartWrite(uint8_t channel, uint8_t *p_data, uint32_t length);
+uint8_t  uartRead(uint8_t channel);
+int32_t  uartPrintf(uint8_t channel, const char *fmt, ...);
+int32_t  uartPrint(uint8_t channel, uint8_t *p_str);
+void     uartFlush(uint8_t channel);
+
 
 
 #ifdef __cplusplus
