@@ -22,8 +22,6 @@
 #include <string.h>
 
 
-#ifdef _USE_HW_UART
-
 
 #define UART_MAX_CH     2
 #define _USE_UART1
@@ -155,9 +153,7 @@ uint32_t uartOpenPC(uint8_t ch, char *port_name, uint32_t baud)
 {
   uint32_t err_code  = 0;
   uart_t *p_uart = &uart_tbl[ch];
-
   struct termios newtio;
-  uint32_t option = 0;
 
 
   if (ch >= UART_MAX_CH)
@@ -181,14 +177,8 @@ uint32_t uartOpenPC(uint8_t ch, char *port_name, uint32_t baud)
 
   bzero(&newtio, sizeof(newtio)); // clear struct for new port settings
 
-  if (option & (1<<0))
-  {
-    newtio.c_cflag = uartGetCFlagBaud(baud)| CS8 | CLOCAL | CREAD | CSTOPB;
-  }
-  else
-  {
-    newtio.c_cflag = uartGetCFlagBaud(baud) | CS8 | CLOCAL | CREAD;
-  }
+
+  newtio.c_cflag = CS8 | CLOCAL | CREAD;
 
   if (p_uart->parity == UART_PARITY_EVEN)
   {
@@ -215,7 +205,6 @@ uint32_t uartOpenPC(uint8_t ch, char *port_name, uint32_t baud)
   // clean the buffer and activate the settings for the port
   tcflush(p_uart->serial_handle, TCIFLUSH);
   tcsetattr(p_uart->serial_handle, TCSANOW, &newtio);
-
 
   p_uart->is_open = true;
 
@@ -507,5 +496,4 @@ int kbhit(void)
 }
 
 
-#endif
 #endif
